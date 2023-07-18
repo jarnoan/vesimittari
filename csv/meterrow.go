@@ -5,7 +5,7 @@ import (
 	"strconv"
 
 	"github.com/jarnoan/vesimittari/meter"
-	"github.com/jarnoan/vesimittari/updater"
+	"github.com/jarnoan/vesimittari/reference"
 )
 
 const (
@@ -18,6 +18,7 @@ const (
 	colDate        = 19
 	colCheck       = 20
 	colConsumption = 21
+	colReference   = 31
 )
 
 type MeterRow struct {
@@ -32,16 +33,20 @@ func (r *MeterRow) SiteNumber() (meter.SiteNumber, error) {
 	return meter.SiteNumber(r.rec[colSite]), nil
 }
 
-func (r *MeterRow) AddReading(rdg updater.MeterReading) error {
+func (r *MeterRow) Reference() reference.Number {
+	return reference.Number(r.rec[colReference])
+}
+
+func (r *MeterRow) AddReading(rdg meter.Reading, ref reference.Number) error {
 	prevCounter, err := strconv.Atoi(r.rec[colCounter])
 	if err != nil {
 		return fmt.Errorf("parse previous counter: %w", err)
 	}
-
 	cons := rdg.Counter - prevCounter
 
 	r.rec[colPrevCounter] = r.rec[colCounter]
 	r.rec[colPrevDate] = r.rec[colDate]
+	r.rec[colReference] = string(ref)
 	r.rec[colCounter] = strconv.Itoa(rdg.Counter)
 	r.rec[colDate] = rdg.Date.Format(datefmt)
 	r.rec[colCheck] = rdg.Customer
