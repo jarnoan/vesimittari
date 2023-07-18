@@ -15,7 +15,6 @@ import (
 
 	"github.com/PuerkitoBio/goquery"
 	"github.com/jarnoan/vesimittari/meter"
-	"github.com/jarnoan/vesimittari/updater"
 )
 
 var (
@@ -33,12 +32,12 @@ func New() *Scraper {
 }
 
 // ReadConsumption reads the consumption data of a meter.
-func (s *Scraper) ReadConsumption(site meter.SiteNumber, num meter.Number) (updater.MeterReading, error) {
+func (s *Scraper) ReadMeter(site meter.SiteNumber, num meter.Number) (meter.Reading, error) {
 	ctx := context.Background()
 
 	jar, err := cookiejar.New(nil)
 	if err != nil {
-		return updater.MeterReading{}, fmt.Errorf("create cookie jar: %w", err)
+		return meter.Reading{}, fmt.Errorf("create cookie jar: %w", err)
 	}
 
 	client := &http.Client{
@@ -47,27 +46,27 @@ func (s *Scraper) ReadConsumption(site meter.SiteNumber, num meter.Number) (upda
 
 	// get login form page because it sets some cookies, I don't know whether they are required or not
 	if err := s.getLoginPage(ctx, client); err != nil {
-		return updater.MeterReading{}, fmt.Errorf("get login page: %w", err)
+		return meter.Reading{}, fmt.Errorf("get login page: %w", err)
 	}
 
 	frontPageDoc, err := s.postLoginForm(ctx, client, site, num)
 	if err != nil {
-		return updater.MeterReading{}, fmt.Errorf("get login page: %w", err)
+		return meter.Reading{}, fmt.Errorf("get login page: %w", err)
 	}
 
 	cntrPageURL, err := s.counterPageURL(frontPageDoc)
 	if err != nil {
-		return updater.MeterReading{}, fmt.Errorf("counter page url: %w", err)
+		return meter.Reading{}, fmt.Errorf("counter page url: %w", err)
 	}
 
 	cntrPageDoc, err := s.getCounterPage(ctx, client, cntrPageURL)
 	if err != nil {
-		return updater.MeterReading{}, fmt.Errorf("get counter page: %w", err)
+		return meter.Reading{}, fmt.Errorf("get counter page: %w", err)
 	}
 
 	consData, err := s.consumptionData(cntrPageDoc)
 	if err != nil {
-		return updater.MeterReading{}, err
+		return meter.Reading{}, err
 	}
 
 	return consData, nil
@@ -178,40 +177,40 @@ func (s *Scraper) getCounterPage(ctx context.Context, client *http.Client, url s
 	return doc, nil
 }
 
-func (s *Scraper) consumptionData(doc *goquery.Document) (updater.MeterReading, error) {
+func (s *Scraper) consumptionData(doc *goquery.Document) (meter.Reading, error) {
 	td := doc.Find(`form[name="ilmoituslomake"] > table > tbody > tr:nth-child(4) > td:nth-child(2)`)
 	if td.Length() != 1 {
-		return updater.MeterReading{}, fmt.Errorf("found %d counter tds", td.Length())
+		return meter.Reading{}, fmt.Errorf("found %d counter tds", td.Length())
 	}
 
 	tdText := td.First().Text()
 	ms := ctrRegex.FindStringSubmatch(tdText)
 	if len(ms) != 3 {
-		return updater.MeterReading{}, fmt.Errorf("found %d matches", len(ms))
+		return meter.Reading{}, fmt.Errorf("found %d matches", len(ms))
 	}
 
 	date, err := time.Parse(datefmt, ms[1])
 	if err != nil {
-		return updater.MeterReading{}, fmt.Errorf("invalid date: %s", ms[1])
+		return meter.Reading{}, fmt.Errorf("invalid date: %s", ms[1])
 	}
 
 	ctr, err := strconv.Atoi(ms[2])
 	if err != nil {
-		return updater.MeterReading{}, fmt.Errorf("invalid counter value: %s", ms[2])
+		return meter.Reading{}, fmt.Errorf("invalid counter value: %s", ms[2])
 	}
 
 	custDiv := doc.Find("#asiakasContent")
 	if custDiv.Length() != 1 {
-		return updater.MeterReading{}, fmt.Errorf("found %d customer divs", td.Length())
+		return meter.Reading{}, fmt.Errorf("found %d customer divs", td.Length())
 	}
 
 	custText := custDiv.First().Text()
 	ms = custRegex.FindStringSubmatch(custText)
 	if len(ms) != 2 {
-		return updater.MeterReading{}, fmt.Errorf("found %d customer names in %s", len(ms), custText)
+		return meter.Reading{}, fmt.Errorf("found %d customer names in %s", len(ms), custText)
 	}
 
-	return updater.MeterReading{
+	return meter.Reading{
 		Counter:  ctr,
 		Date:     date,
 		Customer: ms[1],
