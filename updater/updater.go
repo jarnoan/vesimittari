@@ -22,24 +22,23 @@ type MeterRecord interface {
 	AddReading(meter.Reading, reference.Number) error
 }
 
-type ConsumptionReader interface {
-	ReadConsumption(meter.SiteNumber, meter.Number) (MeterReading, error)
+type MeterReader interface {
+	ReadMeter(meter.SiteNumber, meter.Number) (meter.Reading, error)
 }
 
-type MeterReading struct {
-	Counter  int
-	Date     time.Time
-	Customer string
+type Options struct {
+	UpdateMeterReadings bool
 }
 
 //Updater updates the Data.
 type Updater struct {
-	cr ConsumptionReader
+	meterReader MeterReader
+	opts        Options
 }
 
 // New constructs a new updater.
-func New(cr ConsumptionReader) *Updater {
-	return &Updater{cr}
+func New(mr MeterReader, opts Options) *Updater {
+	return &Updater{mr, opts}
 }
 
 // Update reads the consumptions and updates the data accordingly.
@@ -73,22 +72,24 @@ func (u *Updater) Update(d Data) error {
 			return fmt.Errorf("get site number: %w", err)
 		}
 
-		cd, err := u.cr.ReadConsumption(site, num)
-		if err != nil {
-			return fmt.Errorf("read consumption of meter %s: %w", num, err)
-		}
-		// fmt.Printf("mr before %+v\n", mr)
-		// fmt.Printf("consumption %+v\n", cd)
+		if u.opts.UpdateMeterReadings {
+			cd, err := u.meterReader.ReadMeter(site, num)
+			if err != nil {
+				return fmt.Errorf("read consumption of meter %s: %w", num, err)
+			}
+			// fmt.Printf("mr before %+v\n", mr)
+			// fmt.Printf("consumption %+v\n", cd)
 
-		var ref reference.Number
-		if mr.Reference() != "" {
-			ref = lastRef.Next()
-			lastRef = ref
+			var ref reference.Number
+			if mr.Reference() != "" {
+				ref = lastRef.Next()
+				lastRef = ref
+			}
+			if err := mr.AddReading(cd, ref); err != nil {
+				return fmt.Errorf("add consumption for meter %s: %w", num, err)
+			}
+			// fmt.Printf("mr after %+v\n", mr)
 		}
-		if err := mr.AddReading(cd, ref); err != nil {
-			return fmt.Errorf("add consumption for meter %s: %w", num, err)
-		}
-		// fmt.Printf("mr after %+v\n", mr)
 	}
 
 	d.SetDate(time.Now())

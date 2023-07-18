@@ -2,6 +2,7 @@ package main
 
 import (
 	"bufio"
+	"flag"
 	"log"
 	"os"
 	"time"
@@ -18,13 +19,17 @@ type CounterData struct {
 }
 
 func main() {
-	scr := scraper.New()
-	upd := updater.New(scr)
+	var opts updater.Options
+	flag.BoolVar(&opts.UpdateMeterReadings, "meter", true, "update meter readings")
+	flag.Parse()
 
 	csvf, err := csv.Read(os.Stdin)
 	if err != nil {
 		log.Fatal(err)
 	}
+
+	scr := scraper.New()
+	upd := updater.New(scr, opts)
 
 	if err := upd.Update(csvf); err != nil {
 		log.Fatal(err)
