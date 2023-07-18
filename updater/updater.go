@@ -2,6 +2,7 @@ package updater
 
 import (
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/jarnoan/vesimittari/meter"
