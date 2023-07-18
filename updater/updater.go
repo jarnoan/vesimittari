@@ -18,6 +18,7 @@ type MeterRecord interface {
 	MeterNumber() (meter.Number, error)
 	SiteNumber() (meter.SiteNumber, error)
 	Reference() reference.Number
+	AddReading(meter.Reading, reference.Number) error
 }
 
 type ConsumptionReader interface {
