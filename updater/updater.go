@@ -2,24 +2,35 @@ package updater
 
 import (
 	"fmt"
-	"os"
+	"log"
 	"time"
 
 	"github.com/jarnoan/vesimittari/meter"
 	"github.com/jarnoan/vesimittari/reference"
+	"github.com/shopspring/decimal"
 )
 
 type Data interface {
 	MeterRecords() ([]MeterRecord, error)
 	SetDate(time.Time)
+	CommonVariables() (CommonVariables, error)
+}
+
+// CommonVariables contains general values needed for fee calculations.
+type CommonVariables struct {
+	VAT        decimal.Decimal // %
+	MonthlyFee decimal.Decimal // € without tax
+	WaterPrice decimal.Decimal // €/m³ without tax
 }
 
 // MeterRecord defines the methods needed from a single meter record.
 type MeterRecord interface {
+	Name() string
 	MeterNumber() (meter.Number, error)
 	SiteNumber() (meter.SiteNumber, error)
 	Reference() reference.Number
-	AddReading(meter.Reading, reference.Number) error
+	AddReading(meter.Reading) error
+	UpdateBilling(reference.Number, CommonVariables) error
 }
 
 type MeterReader interface {
@@ -27,6 +38,7 @@ type MeterReader interface {
 }
 
 type Options struct {
+	Verbose             bool
 	UpdateMeterReadings bool
 }
 
@@ -48,23 +60,28 @@ func (u *Updater) Update(d Data) error {
 		return fmt.Errorf("read meter records: %w", err)
 	}
 
-	// Find the largest reference number
+	cv, err := d.CommonVariables()
+	if err != nil {
+		return fmt.Errorf("get common variables: %w", err)
+	}
+
 	var lastRef reference.Number
 	for _, mr := range mrs {
 		if lastRef == "" || mr.Reference() > lastRef {
 			lastRef = mr.Reference()
 		}
 	}
-	fmt.Fprintf(os.Stderr, "last reference: %s\n", lastRef)
+
+	if u.opts.Verbose {
+		log.Printf("common variables: %+v", cv)
+		log.Printf("last reference: %s\n", lastRef)
+	}
 
 	// Read the meterings and update the meter records
-	for _, mr := range mrs {
+	for i, mr := range mrs {
 		num, err := mr.MeterNumber()
 		if err != nil {
 			return fmt.Errorf("get meter number: %w", err)
-		}
-		if num == "" {
-			continue
 		}
 
 		site, err := mr.SiteNumber()
@@ -72,23 +89,25 @@ func (u *Updater) Update(d Data) error {
 			return fmt.Errorf("get site number: %w", err)
 		}
 
-		if u.opts.UpdateMeterReadings {
-			cd, err := u.meterReader.ReadMeter(site, num)
+		if u.opts.UpdateMeterReadings && num != "" {
+			log.Printf("reading meter for %s", mr.Name())
+			r, err := u.meterReader.ReadMeter(site, num)
 			if err != nil {
-				return fmt.Errorf("read consumption of meter %s: %w", num, err)
+				return fmt.Errorf("read meter %s: %w", num, err)
 			}
-			// fmt.Printf("mr before %+v\n", mr)
-			// fmt.Printf("consumption %+v\n", cd)
 
-			var ref reference.Number
-			if mr.Reference() != "" {
-				ref = lastRef.Next()
-				lastRef = ref
+			if err := mr.AddReading(r); err != nil {
+				return fmt.Errorf("add reading for meter %s: %w", num, err)
 			}
-			if err := mr.AddReading(cd, ref); err != nil {
-				return fmt.Errorf("add consumption for meter %s: %w", num, err)
+		}
+
+		if i > 0 { // skip the main meter row
+			ref := lastRef.Next()
+			lastRef = ref
+
+			if err := mr.UpdateBilling(ref, cv); err != nil {
+				return fmt.Errorf("update billing for %s: %w", mr.Name(), err)
 			}
-			// fmt.Printf("mr after %+v\n", mr)
 		}
 	}
 

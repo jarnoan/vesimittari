@@ -21,6 +21,7 @@ type CounterData struct {
 func main() {
 	var opts updater.Options
 	flag.BoolVar(&opts.UpdateMeterReadings, "meter", true, "update meter readings")
+	flag.BoolVar(&opts.Verbose, "v", true, "log verbosely")
 	flag.Parse()
 
 	csvf, err := csv.Read(os.Stdin)

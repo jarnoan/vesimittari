@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"io"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/jarnoan/vesimittari/updater"
+	"github.com/shopspring/decimal"
 )
 
 const datefmt = "2.1.2006"
@@ -19,7 +21,7 @@ type CSVFile struct {
 	dateRow         []string
 	paymentTimeRow  []string
 	mainMeterFeeRow []string
-	waterFeeRow     []string
+	waterPriceRow   []string
 	vatRow          []string
 	messageRow      []string
 }
@@ -72,7 +74,7 @@ func Read(rdr io.Reader) (*CSVFile, error) {
 	}
 
 	// water fee, eur / m3 vat 0%
-	res.waterFeeRow, err = r.Read()
+	res.waterPriceRow, err = r.Read()
 	if err != nil {
 		return nil, fmt.Errorf("read water fee record: %w", err)
 	}
@@ -101,6 +103,39 @@ func (f *CSVFile) MeterRecords() ([]updater.MeterRecord, error) {
 	return mrs, nil
 }
 
+func (f *CSVFile) CommonVariables() (updater.CommonVariables, error) {
+	vat, err := decimal.NewFromString(strings.Replace(f.vatRow[1], ",", ".", 1))
+	if err != nil {
+		return updater.CommonVariables{}, fmt.Errorf("parse VAT: %w", err)
+	}
+
+	mainMeterFee, err := decimal.NewFromString(strings.Replace(f.mainMeterFeeRow[1], ",", ".", 1))
+	if err != nil {
+		return updater.CommonVariables{}, fmt.Errorf("parse main meter fee: %w", err)
+	}
+
+	var meteredCount int64
+	for _, mr := range f.meterRows {
+		if mnum, _ := mr.MeterNumber(); mnum != "" {
+			meteredCount++
+		}
+	}
+	meteredCount-- // less the main meter
+
+	monthly := mainMeterFee.Div(decimal.NewFromInt(meteredCount))
+
+	water, err := decimal.NewFromString(strings.Replace(f.waterPriceRow[1], ",", ".", 1))
+	if err != nil {
+		return updater.CommonVariables{}, fmt.Errorf("parse water price: %w", err)
+	}
+
+	return updater.CommonVariables{
+		VAT:        vat,
+		MonthlyFee: monthly,
+		WaterPrice: water,
+	}, nil
+}
+
 // Date returns billing date.
 func (f *CSVFile) Date() (time.Time, error) {
 	res, err := time.Parse(datefmt, f.dateRow[1])
@@ -116,36 +151,6 @@ func (f *CSVFile) PaymentDays() (int, error) {
 	res, err := strconv.Atoi(f.paymentTimeRow[1])
 	if err != nil {
 		return res, fmt.Errorf("parse payment time: %w", err)
-	}
-
-	return res, nil
-}
-
-// WaterFee returns water fee, eur / m3 vat 0%.
-func (f *CSVFile) WaterFee() (float64, error) {
-	res, err := strconv.ParseFloat(f.waterFeeRow[1], 64)
-	if err != nil {
-		return res, fmt.Errorf("parse water fee: %w", err)
-	}
-
-	return res, nil
-}
-
-// MainMeterFee returns main meter monthly fee, eur / month vat 0%.
-func (f *CSVFile) MainMeterFee() (float64, error) {
-	res, err := strconv.ParseFloat(f.mainMeterFeeRow[1], 64)
-	if err != nil {
-		return res, fmt.Errorf("parse main meter fee: %w", err)
-	}
-
-	return res, nil
-}
-
-// VAT returns VAT percentage.
-func (f *CSVFile) VAT() (float64, error) {
-	res, err := strconv.ParseFloat(f.vatRow[1], 64)
-	if err != nil {
-		return res, fmt.Errorf("parse VAT: %w", err)
 	}
 
 	return res, nil
@@ -186,7 +191,7 @@ func (f *CSVFile) Write(wtr io.Writer) error {
 	if err := w.Write(f.mainMeterFeeRow); err != nil {
 		return fmt.Errorf("write main meter fee row: %w", err)
 	}
-	if err := w.Write(f.waterFeeRow); err != nil {
+	if err := w.Write(f.waterPriceRow); err != nil {
 		return fmt.Errorf("write water fee row: %w", err)
 	}
 	if err := w.Write(f.vatRow); err != nil {
