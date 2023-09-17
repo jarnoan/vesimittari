@@ -31,7 +31,7 @@ func main() {
 
 	acs, err := additionalCosts(addCostsCSV)
 	if err != nil {
-		log.Fatal("read additional costs csv: %s", err)
+		log.Fatalf("read additional costs csv: %s", err)
 	}
 
 	csvf, err := csv.Read(os.Stdin)

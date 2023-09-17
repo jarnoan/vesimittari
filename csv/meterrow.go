@@ -13,26 +13,37 @@ import (
 )
 
 const (
-	colName               = 0
-	colSite               = 14
-	colMeter              = 15
-	colPrevCounter        = 16
-	colPrevDate           = 17
-	colCounter            = 18
-	colDate               = 19
-	colCheck              = 20
-	colConsumption        = 21
-	colWaterFeeWithoutTax = 22
-	colWaterTax           = 23
-	colWaterFeeWithTax    = 24
-	colMonths             = 25
-	colBasicFeeWithoutTax = 26
-	colBasicFeeTax        = 27
-	colBasicFeeWithTax    = 28
-	colExtraDescription   = 29
-	colExtraCost          = 30
-	colTotal              = 31
-	colReference          = 32
+	colName = iota
+	colBankAccount
+	colPhone
+	colEmail
+	colStreetAddress
+	colPostalCode
+	colCity
+	colPropertyID
+	colTenants
+	colPermanentResidency
+	colJoinDate
+	colLeaveDate
+	colSite
+	colMeter
+	colPrevCounter
+	colPrevDate
+	colCounter
+	colDate
+	colCheck
+	colConsumption
+	colWaterFeeWithoutTax
+	colWaterTax
+	colWaterFeeWithTax
+	colMonths
+	colBasicFeeWithoutTax
+	colBasicFeeTax
+	colBasicFeeWithTax
+	colExtraDescription
+	colExtraCost
+	colTotal
+	colReference
 )
 
 type MeterRow struct {
