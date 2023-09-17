@@ -33,7 +33,7 @@ func Read(rdr io.Reader) (*CSVFile, error) {
 	r := csv.NewReader(rdr)
 
 	res.headerRow, err = r.Read()
-	if err == io.EOF {
+	if err != nil {
 		return nil, fmt.Errorf("read header: %w", err)
 	}
 
@@ -134,6 +134,10 @@ func (f *CSVFile) CommonVariables() (updater.CommonVariables, error) {
 		MonthlyFee: monthly,
 		WaterPrice: water,
 	}, nil
+}
+
+func (f *CSVFile) AdditionalCosts() ([]updater.AdditionalCost, error) {
+	return nil, nil
 }
 
 // Date returns billing date.

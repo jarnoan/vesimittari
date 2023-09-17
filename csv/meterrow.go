@@ -29,6 +29,8 @@ const (
 	colBasicFeeWithoutTax = 26
 	colBasicFeeTax        = 27
 	colBasicFeeWithTax    = 28
+	colExtraDescription   = 29
+	colExtraCost          = 30
 	colTotal              = 31
 	colReference          = 32
 )
@@ -72,9 +74,10 @@ func (r *MeterRow) AddReading(rdg meter.Reading) error {
 
 var hundred = decimal.NewFromInt(100)
 
-func (r *MeterRow) UpdateBilling(ref reference.Number, cv updater.CommonVariables) error {
+func (r *MeterRow) UpdateBilling(ref reference.Number, cv updater.CommonVariables, acs []updater.AdditionalCost) error {
 	var total decimal.Decimal
 
+	// Basic fee and consumption are billed only from members who have a water meter
 	if r.rec[colConsumption] != "" {
 		months, err := r.months()
 		if err != nil {
@@ -105,6 +108,15 @@ func (r *MeterRow) UpdateBilling(ref reference.Number, cv updater.CommonVariable
 		r.rec[colWaterTax] = decimalToString(waterTax)
 		r.rec[colWaterFeeWithTax] = decimalToString(waterFeeWithTax)
 	}
+
+	// Additional costs are billed from all members
+	var acsTotal decimal.Decimal
+	for _, ac := range acs {
+		acTax := ac.Cost.Mul(ac.VAT.Div(hundred))
+		acsTotal = acsTotal.Add(ac.Cost).Add(acTax)
+	}
+	r.rec[colExtraCost] = decimalToString(acsTotal)
+	total = total.Add(acsTotal)
 
 	r.rec[colTotal] = decimalToString(total)
 	r.rec[colReference] = string(ref)

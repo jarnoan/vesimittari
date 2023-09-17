@@ -19,8 +19,15 @@ type Data interface {
 // CommonVariables contains general values needed for fee calculations.
 type CommonVariables struct {
 	VAT        decimal.Decimal // %
-	MonthlyFee decimal.Decimal // € without tax
+	MonthlyFee decimal.Decimal // € without tax (päämittarin kuukausimaksu)
 	WaterPrice decimal.Decimal // €/m³ without tax
+}
+
+// AdditionalCost is some cost that is shared between all shareholders, like insurance.
+type AdditionalCost struct {
+	Description string
+	VAT         decimal.Decimal // %
+	Cost        decimal.Decimal // € without tax
 }
 
 // MeterRecord defines the methods needed from a single meter record.
@@ -30,7 +37,7 @@ type MeterRecord interface {
 	SiteNumber() (meter.SiteNumber, error)
 	Reference() reference.Number
 	AddReading(meter.Reading) error
-	UpdateBilling(reference.Number, CommonVariables) error
+	UpdateBilling(reference.Number, CommonVariables, []AdditionalCost) error
 }
 
 type MeterReader interface {
@@ -54,7 +61,7 @@ func New(mr MeterReader, opts Options) *Updater {
 }
 
 // Update reads the consumptions and updates the data accordingly.
-func (u *Updater) Update(d Data) error {
+func (u *Updater) Update(d Data, acs []AdditionalCost) error {
 	mrs, err := d.MeterRecords()
 	if err != nil {
 		return fmt.Errorf("read meter records: %w", err)
@@ -72,8 +79,16 @@ func (u *Updater) Update(d Data) error {
 		}
 	}
 
+	// Calculate additional costs per member
+	memberCount := decimal.NewFromInt(int64(len(mrs) - 1)) // exclude main meter
+	acsPerMember := make([]AdditionalCost, len(acs))
+	for i, c := range acs {
+		acsPerMember[i] = c
+		acsPerMember[i].Cost = c.Cost.DivRound(memberCount, 2)
+	}
 	if u.opts.Verbose {
 		log.Printf("common variables: %+v", cv)
+		log.Printf("additional costs: %+v", acsPerMember)
 		log.Printf("last reference: %s\n", lastRef)
 	}
 
@@ -105,7 +120,7 @@ func (u *Updater) Update(d Data) error {
 			ref := lastRef.Next()
 			lastRef = ref
 
-			if err := mr.UpdateBilling(ref, cv); err != nil {
+			if err := mr.UpdateBilling(ref, cv, acsPerMember); err != nil {
 				return fmt.Errorf("update billing for %s: %w", mr.Name(), err)
 			}
 		}
